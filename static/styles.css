@@ -1,0 +1,369 @@
+:root {
+  --bg: #07111a;
+  --bg-soft: #0d1b27;
+  --panel: rgba(12, 25, 36, 0.88);
+  --border: rgba(123, 156, 178, 0.18);
+  --text: #e8f1f7;
+  --muted: #8ca3b5;
+  --accent: #9be564;
+  --accent-soft: rgba(155, 229, 100, 0.12);
+  --warning: #ffd166;
+  --danger: #ef476f;
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(155, 229, 100, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(54, 191, 250, 0.12), transparent 24%),
+    linear-gradient(180deg, #040b12 0%, var(--bg) 100%);
+  color: var(--text);
+}
+
+.shell {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+}
+
+.hero,
+.metrics-grid,
+.grid,
+.visual-grid,
+.flash-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.hero {
+  grid-template-columns: 1.5fr minmax(220px, 320px);
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.subtle {
+  margin-top: 10px;
+  color: var(--muted);
+  max-width: 48ch;
+}
+
+.status-card,
+.metric-card,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+
+.status-card {
+  padding: 18px;
+}
+
+.status-card p + p {
+  margin-top: 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  text-transform: capitalize;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pill-success,
+.pill-partial_success {
+  color: #07110a;
+  background: var(--accent);
+}
+
+.pill-failed {
+  color: white;
+  background: var(--danger);
+}
+
+.metrics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.metric-card {
+  padding: 18px;
+}
+
+.metric-card span,
+.metric-card small {
+  color: var(--muted);
+}
+
+.metric-card strong {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+}
+
+.metric-card.accent {
+  background: linear-gradient(135deg, rgba(155, 229, 100, 0.18), rgba(14, 26, 38, 0.92));
+}
+
+.grid.two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.run-grid {
+  align-items: start;
+}
+
+.panel {
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.panel.empty {
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.panel-copy {
+  color: var(--muted);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.definition-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.definition-list div {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.definition-list dt {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+
+.definition-list dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.flash {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.flash-success {
+  background: rgba(155, 229, 100, 0.12);
+  border-color: rgba(155, 229, 100, 0.24);
+}
+
+.flash-error {
+  background: rgba(239, 71, 111, 0.12);
+  border-color: rgba(239, 71, 111, 0.24);
+}
+
+.run-form {
+  display: grid;
+  gap: 14px;
+}
+
+.run-form label,
+.form-row label {
+  display: grid;
+  gap: 8px;
+}
+
+.run-form span,
+.form-row span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+input,
+select,
+.button {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+}
+
+input::placeholder {
+  color: rgba(140, 163, 181, 0.72);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(155, 229, 100, 0.24);
+  border-color: rgba(155, 229, 100, 0.45);
+}
+
+.checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.button {
+  cursor: pointer;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.button-primary {
+  background: linear-gradient(135deg, #9be564, #b8f07c);
+  color: #09110c;
+  border-color: transparent;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+th,
+td {
+  padding: 12px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.visual-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.visual-card {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.visual-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.visual-card a,
+.download-list a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.visual-card img {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #061019;
+}
+
+.download-list {
+  display: grid;
+  gap: 10px;
+}
+
+.download-list a {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: "SFMono-Regular", "Menlo", monospace;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .metrics-grid,
+  .grid.two-up,
+  .visual-grid,
+  .definition-list,
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .shell {
+    width: min(100vw - 20px, 1180px);
+    padding-top: 20px;
+  }
+}
