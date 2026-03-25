@@ -56,6 +56,20 @@ class FrontendSmokeTests(unittest.TestCase):
             kwargs = mock_run.call_args.kwargs
             self.assertEqual(kwargs["data_source"], "synthetic")
 
+    def test_demo_strategy_lab_triggers_optimized_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app = create_app(tmpdir)
+            client = app.test_client()
+
+            with patch("app.run_pipeline") as mock_run:
+                response = client.post("/run", data={"mode": "demo_lab"})
+
+            self.assertEqual(response.status_code, 302)
+            mock_run.assert_called_once()
+            kwargs = mock_run.call_args.kwargs
+            self.assertTrue(kwargs["optimize"])
+            self.assertEqual(kwargs["train_ratio"], 0.70)
+
     def test_manual_run_triggers_pipeline_with_form_values(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             app = create_app(tmpdir)
@@ -82,6 +96,33 @@ class FrontendSmokeTests(unittest.TestCase):
             self.assertEqual(kwargs["initial_capital"], 250000.0)
             self.assertEqual(kwargs["sizing_method"], "fixed_pct")
             self.assertTrue(kwargs["strict"])
+            self.assertFalse(kwargs["optimize"])
+
+    def test_manual_run_passes_strategy_lab_values(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app = create_app(tmpdir)
+            client = app.test_client()
+
+            with patch("app.run_pipeline") as mock_run:
+                response = client.post("/run", data={
+                    "mode": "manual",
+                    "source": "synthetic",
+                    "file": "",
+                    "symbol": "",
+                    "start": "2024-01-01",
+                    "end": "2024-06-01",
+                    "capital": "500000",
+                    "sizing": "equal",
+                    "optimize": "on",
+                    "train_ratio": "0.75",
+                })
+
+            self.assertEqual(response.status_code, 302)
+            mock_run.assert_called_once()
+            kwargs = mock_run.call_args.kwargs
+            self.assertTrue(kwargs["optimize"])
+            self.assertEqual(kwargs["train_ratio"], 0.75)
+            self.assertEqual(kwargs["data_source"], "synthetic")
 
 
 if __name__ == "__main__":

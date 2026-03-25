@@ -19,12 +19,16 @@ DEFAULT_OUTPUT_DIR = "output"
 SOURCE_OPTIONS = ["synthetic", "yfinance", "csv"]
 SIZING_OPTIONS = ["kelly_fractional", "fixed_pct", "atr_based", "equal"]
 VISUAL_ARTIFACTS = [
+    ("Strategy Lab", "strategy_lab.png"),
     ("Best Strategy Dashboard", "dashboard.png"),
     ("Strategy Comparison", "strategy_comparison.png"),
     ("Walk-Forward Validation", "walk_forward.png"),
     ("Monte Carlo Simulation", "monte_carlo.png"),
 ]
 DOWNLOAD_ARTIFACTS = [
+    "strategy_lab.json",
+    "strategy_lab_summary.csv",
+    "strategy_lab_candidates.csv",
     "research_report.md",
     "research_report.json",
     "performance_summary.csv",
@@ -68,6 +72,19 @@ def create_app(output_dir: str | Path = DEFAULT_OUTPUT_DIR) -> Flask:
                 flash("Demo backtest finished. Dashboard updated with fresh demo output.", "success")
                 return redirect(url_for("index"))
 
+            if mode == "demo_lab":
+                run_pipeline(
+                    data_source="synthetic",
+                    output_dir=output_path,
+                    initial_capital=1_000_000,
+                    sizing_method="kelly_fractional",
+                    strict=False,
+                    optimize=True,
+                    train_ratio=0.70,
+                )
+                flash("Demo strategy lab finished. Dashboard updated with optimized candidates and holdout results.", "success")
+                return redirect(url_for("index"))
+
             run_kwargs = _build_run_kwargs(form_values, output_path)
             run_pipeline(**run_kwargs)
             flash("Manual backtest finished successfully.", "success")
@@ -97,6 +114,7 @@ def _build_dashboard_context(output_dir: Path, form_values: dict | None = None) 
     leaderboard = report.get("leaderboard", [])
     best = report.get("best_strategy")
     dataset = report.get("dataset", {})
+    optimization = report.get("optimization")
 
     visuals = [
         {"label": label, "filename": filename}
@@ -116,6 +134,7 @@ def _build_dashboard_context(output_dir: Path, form_values: dict | None = None) 
         "dataset": dataset,
         "leaderboard": leaderboard,
         "best": best,
+        "optimization": optimization,
         "health": health,
         "visuals": visuals,
         "downloads": downloads,
@@ -173,6 +192,8 @@ def _default_form_values() -> dict:
         "capital": "1000000",
         "sizing": "kelly_fractional",
         "strict": "",
+        "optimize": "",
+        "train_ratio": "0.70",
     }
 
 
@@ -184,6 +205,8 @@ def _extract_form_values(form_data) -> dict:
     }
     if form_data.get("strict"):
         values["strict"] = "on"
+    if form_data.get("optimize"):
+        values["optimize"] = "on"
     return values
 
 
@@ -193,6 +216,12 @@ def _build_run_kwargs(form_values: dict, output_dir: Path) -> dict:
         capital = float(capital_raw)
     except ValueError as exc:
         raise ValueError("Capital must be a valid number.") from exc
+
+    train_ratio_raw = form_values.get("train_ratio", "0.70")
+    try:
+        train_ratio = float(train_ratio_raw)
+    except ValueError as exc:
+        raise ValueError("Train ratio must be a valid decimal between 0.50 and 0.95.") from exc
 
     return {
         "data_source": form_values.get("source", "synthetic"),
@@ -204,6 +233,8 @@ def _build_run_kwargs(form_values: dict, output_dir: Path) -> dict:
         "initial_capital": capital,
         "sizing_method": form_values.get("sizing") or "kelly_fractional",
         "strict": form_values.get("strict") == "on",
+        "optimize": form_values.get("optimize") == "on",
+        "train_ratio": train_ratio,
     }
 
 

@@ -325,6 +325,76 @@ def plot_strategy_comparison(scorecard_df: pd.DataFrame, savepath: str = "strate
 
 
 # ─────────────────────────────────────────────
+#  STRATEGY LAB SUMMARY
+# ─────────────────────────────────────────────
+def plot_strategy_lab(summary_df: pd.DataFrame, savepath: str = "strategy_lab.png"):
+    if summary_df is None or summary_df.empty:
+        return
+
+    _set_theme()
+    ranked = summary_df.sort_values("test_score", ascending=True).copy()
+    for col in ["train_score", "test_score", "test_total_return_pct", "test_sharpe_ratio", "candidate_count"]:
+        if col not in ranked.columns:
+            ranked[col] = 0.0
+    y_pos = np.arange(len(ranked))
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6), facecolor=DARK_BG)
+
+    ax = axes[0]
+    ax.barh(y_pos - 0.18, ranked["train_score"], height=0.32, color=BLUE, alpha=0.75, label="Train score")
+    ax.barh(y_pos + 0.18, ranked["test_score"], height=0.32, color=ACCENT, alpha=0.85, label="Test score")
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(ranked["family"])
+    ax.set_xlabel("Score", fontsize=8)
+    ax.set_title("TRAIN VS TEST PROMOTION SCORE", fontsize=9, color=TEXT,
+                 loc="left", fontweight="bold", pad=8)
+    for idx, row in enumerate(ranked.itertuples()):
+        ax.text(row.test_score + 0.8, idx + 0.18, f"{row.test_score:.1f}", color=MUTED, va="center", fontsize=7)
+    ax.legend(fontsize=8)
+    _style_ax(ax)
+
+    ax = axes[1]
+    bubble_size = np.clip(ranked["candidate_count"].fillna(1), 1, 10) * 90
+    scatter = ax.scatter(
+        ranked["test_total_return_pct"],
+        ranked["test_sharpe_ratio"],
+        s=bubble_size,
+        c=ranked["test_score"],
+        cmap=LinearSegmentedColormap.from_list("lab_map", [RED, ORANGE, ACCENT]),
+        alpha=0.85,
+        edgecolors=DARK_BG,
+        linewidths=0.6,
+    )
+    for row in ranked.itertuples():
+        ax.text(
+            row.test_total_return_pct + 0.25,
+            row.test_sharpe_ratio + 0.02,
+            row.family,
+            fontsize=7,
+            color=MUTED,
+        )
+    ax.axhline(0, color=MUTED, linewidth=0.8, linestyle=":")
+    ax.axvline(0, color=MUTED, linewidth=0.8, linestyle=":")
+    ax.set_xlabel("Test Return %", fontsize=8)
+    ax.set_ylabel("Test Sharpe", fontsize=8)
+    ax.set_title("HOLDOUT PERFORMANCE MAP", fontsize=9, color=TEXT,
+                 loc="left", fontweight="bold", pad=8)
+    cbar = fig.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+    cbar.ax.tick_params(colors=MUTED, labelsize=7)
+    cbar.outline.set_edgecolor(BORDER)
+    cbar.set_label("Test Score", color=MUTED, fontsize=8)
+    _style_ax(ax)
+
+    fig.suptitle("STRATEGY LAB — Parameter Search and Promotion",
+                 color=TEXT, fontsize=10, fontweight="bold", y=1.01)
+    plt.tight_layout()
+    plt.savefig(savepath, dpi=150, bbox_inches="tight",
+                facecolor=DARK_BG, edgecolor="none")
+    plt.close()
+    print(f"[charts] Strategy lab chart saved → {savepath}")
+
+
+# ─────────────────────────────────────────────
 #  MONTE CARLO FAN CHART
 # ─────────────────────────────────────────────
 def plot_monte_carlo(

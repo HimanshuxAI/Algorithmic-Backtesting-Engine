@@ -227,6 +227,7 @@ def export_research_report(
     ranking_df: pd.DataFrame,
     all_results: list[dict],
     dataset_info: dict,
+    optimization_report: dict | None = None,
 ) -> dict:
     """Write markdown + JSON reports for the whole strategy run."""
     output_path = Path(output_dir)
@@ -240,12 +241,17 @@ def export_research_report(
         "leaderboard": ranking_df.to_dict("records"),
         "best_strategy": _build_best_payload(best_result) if best_result else None,
     }
+    if optimization_report:
+        payload["optimization"] = _make_serializable(optimization_report)
 
     json_path = output_path / "research_report.json"
     json_path.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
 
     markdown_path = output_path / "research_report.md"
-    markdown_path.write_text(_build_markdown_report(dataset_info, ranking_df, best_result), encoding="utf-8")
+    markdown_path.write_text(
+        _build_markdown_report(dataset_info, ranking_df, best_result, optimization_report),
+        encoding="utf-8",
+    )
 
     return {
         "json": str(json_path),
@@ -257,6 +263,7 @@ def _build_markdown_report(
     dataset_info: dict,
     ranking_df: pd.DataFrame,
     best_result: dict | None,
+    optimization_report: dict | None = None,
 ) -> str:
     lines = [
         "# Quant Strategy Research Report",
@@ -266,6 +273,7 @@ def _build_markdown_report(
         f"- Bars: {dataset_info.get('bars', 0)}",
         f"- Range: {dataset_info.get('start', 'n/a')} to {dataset_info.get('end', 'n/a')}",
         f"- Selection mode: {dataset_info.get('selection_metric', 'resilience_score')}",
+        f"- Research mode: {dataset_info.get('research_mode', 'preset_suite')}",
         "",
         "## Resilience Leaderboard",
         _markdown_table(
@@ -310,6 +318,44 @@ def _build_markdown_report(
                 ]),
             ])
 
+    if optimization_report:
+        split = optimization_report.get("split", {})
+        summary = optimization_report.get("summary", [])
+        candidates = optimization_report.get("candidates", [])
+        top_candidates = optimization_report.get("top_candidates", [])
+        lines.extend([
+            "",
+            "## Strategy Lab",
+            f"- Train/Test Split: {split.get('train_bars', 0)} / {split.get('test_bars', 0)} bars",
+            f"- Train Range: {split.get('train_start', 'n/a')} to {split.get('train_end', 'n/a')}",
+            f"- Test Range: {split.get('test_start', 'n/a')} to {split.get('test_end', 'n/a')}",
+            "",
+        ])
+        if summary:
+            lines.extend([
+                "### Promoted Configurations",
+                _markdown_table(pd.DataFrame(summary), [
+                    "family", "selected_param_label", "train_score", "test_score",
+                    "test_total_return_pct", "test_sharpe_ratio", "test_max_drawdown_pct"
+                ]),
+                "",
+            ])
+        if candidates:
+            top_candidates_df = pd.DataFrame(top_candidates) if top_candidates else (
+                pd.DataFrame(candidates)
+                .query("status == 'success'")
+                .sort_values(["train_score", "train_sharpe_ratio"], ascending=[False, False])
+                .head(8)
+            )
+            if not top_candidates_df.empty:
+                lines.extend([
+                    "### Top Candidate Configurations",
+                    _markdown_table(top_candidates_df, [
+                        "family", "param_label", "train_score",
+                        "train_total_return_pct", "train_sharpe_ratio", "train_max_drawdown_pct"
+                    ]),
+                ])
+
     lines.append("")
     return "\n".join(lines)
 
@@ -351,5 +397,6 @@ def _build_best_payload(best_result: dict) -> dict:
         "regime_analysis": best_result.get("regime_analysis", {}),
         "resilience_score": best_result.get("resilience_score", 0),
         "monte_carlo": monte_carlo,
+        "optimization": best_result.get("optimization"),
     }
     return _make_serializable(payload)

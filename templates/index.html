@@ -7,23 +7,88 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <main class="shell">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">-----</p>
+  {% set best_summary = best.get('summary', {}) if best else {} %}
+  {% set best_monte = best.get('monte_carlo', {}) if best else {} %}
+  {% set best_lab = best.get('optimization', {}) if best else {} %}
+  {% set lead = leaderboard[0] if leaderboard else {} %}
+  {% set run_config = manifest.get('config', {}) if manifest else {} %}
+
+  <main class="page-shell">
+    <section class="masthead">
+      <div class="masthead-copy">
+        <div class="masthead-topline">
+          <span class="brand-chip">Quant Research OS</span>
+          <span class="live-indicator">White Theme Console</span>
+        </div>
         <h1>Quant Backtest Dashboard</h1>
-        <p class="subtle">
-         ------
+        <p class="hero-copy">
+          A brighter research cockpit for strategy ranking, train-test promotion, and artifact review.
+          It keeps the pipeline backend-first, but makes the frontend feel more like a premium decision surface.
         </p>
+        <div class="hero-pill-row">
+          <span class="hero-pill">Source {{ dataset.get('source', 'N/A') }}</span>
+          <span class="hero-pill">Mode {{ dataset.get('research_mode', 'preset_suite') }}</span>
+          <span class="hero-pill">{{ dataset.get('bars')|pretty }} bars</span>
+          <span class="hero-pill">{{ visuals|length }} visuals</span>
+        </div>
       </div>
-      {% if manifest %}
-      <div class="status-card">
-        <span class="pill pill-{{ manifest.get('status', 'unknown') }}">{{ manifest.get('status', 'unknown') }}</span>
-        <p>Run ID: {{ manifest.get('run_id', 'N/A') }}</p>
-        <p>Duration: {{ manifest.get('duration_seconds')|pretty }}s</p>
+
+      <div class="hero-stack">
+        <article class="hero-card hero-card-primary">
+          <div class="panel-kicker">Latest Run</div>
+          {% if manifest %}
+          <div class="hero-status-row">
+            <span class="pill pill-{{ manifest.get('status', 'unknown') }}">{{ manifest.get('status', 'unknown') }}</span>
+            <span class="micro-copy">{{ manifest.get('duration_seconds')|pretty }}s runtime</span>
+          </div>
+          <div class="hero-stat-grid">
+            <div>
+              <span>Run ID</span>
+              <strong>{{ manifest.get('run_id', 'N/A') }}</strong>
+            </div>
+            <div>
+              <span>Successful</span>
+              <strong>{{ manifest.get('successful_strategies', [])|length }}</strong>
+            </div>
+            <div>
+              <span>Failed</span>
+              <strong>{{ manifest.get('failed_strategies', [])|length }}</strong>
+            </div>
+            <div>
+              <span>Downloads</span>
+              <strong>{{ downloads|length }}</strong>
+            </div>
+          </div>
+          {% else %}
+          <p class="hero-card-copy">
+            No run has been loaded yet. Launch a demo or submit a manual backtest to populate the research surface.
+          </p>
+          {% endif %}
+        </article>
+
+        <article class="hero-card">
+          <div class="panel-kicker">Current Leader</div>
+          <h2>{{ best.get('name', lead.get('strategy', 'Awaiting run')) if best or lead else 'Awaiting run' }}</h2>
+          <p class="hero-card-copy">
+            {% if best or lead %}
+            Top strategy by composite resilience with the latest exported research artifacts.
+            {% else %}
+            Run output will pin the current best strategy here along with its headline stats.
+            {% endif %}
+          </p>
+          <div class="leader-mini-grid">
+            <div>
+              <span>Resilience</span>
+              <strong>{{ lead.get('resilience_score')|pretty if lead else 'N/A' }}</strong>
+            </div>
+            <div>
+              <span>Total Return</span>
+              <strong>{{ best_summary.get('total_return_pct')|pretty if best else 'N/A' }}{% if best %}%{% endif %}</strong>
+            </div>
+          </div>
+        </article>
       </div>
-      {% endif %}
-    </header>
+    </section>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -41,50 +106,82 @@
     </section>
     {% endif %}
 
-    <section class="grid two-up run-grid">
-      <article class="panel">
-        <div class="panel-head">
-          <h2>Run Demo</h2>
+    <section class="command-grid">
+      <article class="panel panel-emphasis">
+        <div class="section-header">
+          <div>
+            <p class="panel-kicker">Launch Center</p>
+            <h2>Choose a research path</h2>
+          </div>
         </div>
-        <p class="panel-copy">
-          One click runs the synthetic demo backtest and refreshes the dashboard with sample results.
-        </p>
-        <form method="post" action="{{ url_for('run_backtest') }}">
-          <input type="hidden" name="mode" value="demo">
-          <button class="button button-primary" type="submit">Run Demo Backtest</button>
-        </form>
+        <div class="mode-grid">
+          <article class="mode-card mode-card-dark">
+            <div class="mode-card-top">
+              <span class="mode-label">Demo Baseline</span>
+              <span class="mode-badge">Fastest</span>
+            </div>
+            <h3>Run Demo Backtest</h3>
+            <p>
+              Load the preset synthetic market, evaluate the full suite, and refresh the dashboard with a baseline result set.
+            </p>
+            <form method="post" action="{{ url_for('run_backtest') }}">
+              <input type="hidden" name="mode" value="demo">
+              <button class="button button-primary" type="submit">Run Demo Backtest</button>
+            </form>
+          </article>
+
+          <article class="mode-card">
+            <div class="mode-card-top">
+              <span class="mode-label">Train / Test Lab</span>
+              <span class="mode-badge mode-badge-soft">Optimization</span>
+            </div>
+            <h3>Run Demo Strategy Lab</h3>
+            <p>
+              Promote tuned strategy families from a holdout-aware workflow and push the winners into the final leaderboard.
+            </p>
+            <form method="post" action="{{ url_for('run_backtest') }}">
+              <input type="hidden" name="mode" value="demo_lab">
+              <button class="button button-secondary" type="submit">Run Demo Strategy Lab</button>
+            </form>
+          </article>
+        </div>
       </article>
 
       <article class="panel">
-        <div class="panel-head">
-          <h2>Manual Backtest</h2>
+        <div class="section-header">
+          <div>
+            <p class="panel-kicker">Manual Run</p>
+            <h2>Configure a custom backtest</h2>
+          </div>
         </div>
         <p class="panel-copy">
-          Choose a source and core inputs. CSV path is only used for <code>csv</code>. Symbol and dates are used for <code>yfinance</code>.
+          Use Yahoo Finance, CSV, or synthetic data. Turn on the strategy lab if you want train-set tuning and holdout validation.
         </p>
         <form method="post" action="{{ url_for('run_backtest') }}" class="run-form">
           <input type="hidden" name="mode" value="manual">
 
-          <label>
-            <span>Source</span>
-            <select name="source">
-              {% for option in source_options %}
-              <option value="{{ option }}" {% if form_values.get('source') == option %}selected{% endif %}>{{ option }}</option>
-              {% endfor %}
-            </select>
-          </label>
+          <div class="form-grid form-grid-wide">
+            <label>
+              <span>Source</span>
+              <select name="source">
+                {% for option in source_options %}
+                <option value="{{ option }}" {% if form_values.get('source') == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </label>
 
-          <label>
-            <span>CSV File Path</span>
-            <input type="text" name="file" value="{{ form_values.get('file', '') }}" placeholder="/absolute/path/to/data.csv">
-          </label>
+            <label>
+              <span>CSV File Path</span>
+              <input type="text" name="file" value="{{ form_values.get('file', '') }}" placeholder="/absolute/path/to/data.csv">
+            </label>
 
-          <label>
-            <span>Symbol</span>
-            <input type="text" name="symbol" value="{{ form_values.get('symbol', '') }}" placeholder="RELIANCE.NS">
-          </label>
+            <label>
+              <span>Symbol</span>
+              <input type="text" name="symbol" value="{{ form_values.get('symbol', '') }}" placeholder="RELIANCE.NS">
+            </label>
+          </div>
 
-          <div class="form-row">
+          <div class="form-grid">
             <label>
               <span>Start</span>
               <input type="date" name="start" value="{{ form_values.get('start', '') }}">
@@ -95,7 +192,7 @@
             </label>
           </div>
 
-          <div class="form-row">
+          <div class="form-grid">
             <label>
               <span>Capital</span>
               <input type="number" name="capital" value="{{ form_values.get('capital', '') }}" min="1" step="1000">
@@ -110,74 +207,257 @@
             </label>
           </div>
 
-          <label class="checkbox">
-            <input type="checkbox" name="strict" {% if form_values.get('strict') == 'on' %}checked{% endif %}>
-            <span>Strict mode</span>
-          </label>
+          <div class="toggle-grid">
+            <label class="toggle-card">
+              <input type="checkbox" name="strict" {% if form_values.get('strict') == 'on' %}checked{% endif %}>
+              <span class="toggle-copy">
+                <strong>Strict mode</strong>
+                <small>Abort the run on the first strategy failure.</small>
+              </span>
+            </label>
 
-          <button class="button" type="submit">Run Manual Backtest</button>
+            <label class="toggle-card">
+              <input type="checkbox" name="optimize" {% if form_values.get('optimize') == 'on' %}checked{% endif %}>
+              <span class="toggle-copy">
+                <strong>Enable strategy lab</strong>
+                <small>Score candidates on train data before promotion.</small>
+              </span>
+            </label>
+          </div>
+
+          <div class="form-grid form-grid-tight">
+            <label>
+              <span>Train Ratio</span>
+              <input type="number" name="train_ratio" value="{{ form_values.get('train_ratio', '0.70') }}" min="0.50" max="0.95" step="0.05">
+            </label>
+            <div class="form-note">
+              <p class="panel-kicker">Lab Guidance</p>
+              <p>
+                0.70 is a good default for balanced train/test promotion. Use a higher value only when the dataset is deep enough.
+              </p>
+            </div>
+          </div>
+
+          <button class="button button-primary" type="submit">Run Manual Backtest</button>
         </form>
       </article>
     </section>
 
     {% if not output_ready %}
-    <section class="panel empty">
-      <h2>No backend output yet</h2>
-      <p>Run <code>python main.py</code> first, then refresh this page.</p>
+    <section class="panel empty-state">
+      <p class="panel-kicker">No Output Yet</p>
+      <h2>The dashboard is ready for its first run</h2>
+      <p>
+        Launch a demo, open the strategy lab, or run <code>python main.py</code> from the terminal and refresh this page.
+      </p>
     </section>
     {% else %}
-    <section class="metrics-grid">
-      <article class="metric-card accent">
+    <section class="metric-ribbon">
+      <article class="metric-tile metric-tile-highlight">
         <span>Best Strategy</span>
-        <strong>{{ best.get('name', 'N/A') if best else 'N/A' }}</strong>
+        <strong>{{ best.get('name', lead.get('strategy', 'N/A')) if best or lead else 'N/A' }}</strong>
         <small>Composite resilience leader</small>
       </article>
-      <article class="metric-card">
+      <article class="metric-tile">
         <span>Total Return</span>
-        <strong>{{ best.get('summary', {}).get('total_return_pct')|pretty if best else 'N/A' }}%</strong>
-        <small>Best strategy total return</small>
+        <strong>{{ best_summary.get('total_return_pct')|pretty if best else 'N/A' }}{% if best %}%{% endif %}</strong>
+        <small>Latest best strategy return</small>
       </article>
-      <article class="metric-card">
+      <article class="metric-tile">
         <span>Max Drawdown</span>
-        <strong>{{ best.get('summary', {}).get('max_drawdown_pct')|pretty if best else 'N/A' }}%</strong>
-        <small>Best strategy drawdown</small>
+        <strong>{{ best_summary.get('max_drawdown_pct')|pretty if best else 'N/A' }}{% if best %}%{% endif %}</strong>
+        <small>Capital protection snapshot</small>
       </article>
-      <article class="metric-card">
+      <article class="metric-tile">
         <span>Profit Probability</span>
-        <strong>{{ best.get('monte_carlo', {}).get('prob_profit')|pretty if best else 'N/A' }}%</strong>
-        <small>Monte Carlo estimate</small>
+        <strong>{{ best_monte.get('prob_profit')|pretty if best else 'N/A' }}{% if best and best_monte.get('prob_profit') is not none %}%{% endif %}</strong>
+        <small>Monte Carlo profit estimate</small>
       </article>
     </section>
 
-    <section class="grid two-up">
-      <article class="panel">
-        <div class="panel-head">
-          <h2>Dataset</h2>
+    <section class="insight-grid">
+      <article class="panel spotlight-panel">
+        <div class="section-header">
+          <div>
+            <p class="panel-kicker">Strategy Spotlight</p>
+            <h2>{{ best.get('name', lead.get('strategy', 'N/A')) if best or lead else 'N/A' }}</h2>
+          </div>
+          {% if lead %}
+          <span class="pill pill-neutral">Rank {{ lead.get('rank', 1) }}</span>
+          {% endif %}
         </div>
-        <dl class="definition-list">
-          <div><dt>Source</dt><dd>{{ dataset.get('source', 'N/A') }}</dd></div>
-          <div><dt>Bars</dt><dd>{{ dataset.get('bars')|pretty }}</dd></div>
-          <div><dt>Range</dt><dd>{{ dataset.get('start', 'N/A') }} to {{ dataset.get('end', 'N/A') }}</dd></div>
-          <div><dt>Selection</dt><dd>{{ dataset.get('selection_metric', 'N/A') }}</dd></div>
-        </dl>
+        <p class="panel-copy">
+          {% if best %}
+          This is the current front-runner after resilience ranking, walk-forward checks, regime scoring, and execution-aware backtesting.
+          {% else %}
+          Run results will summarize the top strategy here with performance, risk, and lab metadata.
+          {% endif %}
+        </p>
+        <div class="spotlight-stats">
+          <div>
+            <span>Sharpe</span>
+            <strong>{{ best_summary.get('sharpe_ratio')|pretty if best else 'N/A' }}</strong>
+          </div>
+          <div>
+            <span>Win Rate</span>
+            <strong>{{ best_summary.get('win_rate_pct')|pretty if best else 'N/A' }}{% if best %}%{% endif %}</strong>
+          </div>
+          <div>
+            <span>Trades</span>
+            <strong>{{ best_summary.get('total_trades')|pretty if best else 'N/A' }}</strong>
+          </div>
+          <div>
+            <span>Profit Factor</span>
+            <strong>{{ best_summary.get('profit_factor')|pretty if best else 'N/A' }}</strong>
+          </div>
+        </div>
+
+        {% if best_lab %}
+        <div class="lab-inline">
+          <div>
+            <span>Family</span>
+            <strong>{{ best_lab.get('family', 'N/A') }}</strong>
+          </div>
+          <div>
+            <span>Params</span>
+            <strong>{{ best_lab.get('param_label', 'N/A') }}</strong>
+          </div>
+          <div>
+            <span>Train Score</span>
+            <strong>{{ best_lab.get('train_score')|pretty }}</strong>
+          </div>
+          <div>
+            <span>Test Score</span>
+            <strong>{{ best_lab.get('test_score')|pretty }}</strong>
+          </div>
+        </div>
+        {% endif %}
       </article>
 
-      <article class="panel">
-        <div class="panel-head">
-          <h2>Run Health</h2>
-        </div>
-        <dl class="definition-list">
-          <div><dt>Successful</dt><dd>{{ manifest.get('successful_strategies', [])|length if manifest else 0 }}</dd></div>
-          <div><dt>Failed</dt><dd>{{ manifest.get('failed_strategies', [])|length if manifest else 0 }}</dd></div>
-          <div><dt>Output Dir</dt><dd>{{ manifest.get('config', {}).get('output_dir', 'N/A') if manifest else 'N/A' }}</dd></div>
-          <div><dt>Strict Mode</dt><dd>{{ manifest.get('config', {}).get('strict', false) if manifest else false }}</dd></div>
-        </dl>
-      </article>
+      <div class="stack-column">
+        <article class="panel compact-panel">
+          <div class="section-header">
+            <div>
+              <p class="panel-kicker">Dataset</p>
+              <h2>Run Context</h2>
+            </div>
+          </div>
+          <dl class="data-list">
+            <div><dt>Source</dt><dd>{{ dataset.get('source', 'N/A') }}</dd></div>
+            <div><dt>Bars</dt><dd>{{ dataset.get('bars')|pretty }}</dd></div>
+            <div><dt>Range</dt><dd>{{ dataset.get('start', 'N/A') }} to {{ dataset.get('end', 'N/A') }}</dd></div>
+            <div><dt>Selection</dt><dd>{{ dataset.get('selection_metric', 'N/A') }}</dd></div>
+            <div><dt>Research Mode</dt><dd>{{ dataset.get('research_mode', 'N/A') }}</dd></div>
+          </dl>
+        </article>
+
+        <article class="panel compact-panel">
+          <div class="section-header">
+            <div>
+              <p class="panel-kicker">Operational Health</p>
+              <h2>Run Integrity</h2>
+            </div>
+          </div>
+          <dl class="data-list">
+            <div><dt>Successful</dt><dd>{{ manifest.get('successful_strategies', [])|length if manifest else 0 }}</dd></div>
+            <div><dt>Failed</dt><dd>{{ manifest.get('failed_strategies', [])|length if manifest else 0 }}</dd></div>
+            <div><dt>Strict Mode</dt><dd>{{ run_config.get('strict', false) if manifest else false }}</dd></div>
+            <div><dt>Output Dir</dt><dd class="path-value">{{ run_config.get('output_dir', 'N/A') if manifest else 'N/A' }}</dd></div>
+          </dl>
+        </article>
+      </div>
     </section>
+
+    {% if optimization %}
+    <section class="panel lab-panel">
+      <div class="section-header">
+        <div>
+          <p class="panel-kicker">Strategy Lab</p>
+          <h2>Train-test promotion board</h2>
+        </div>
+        <span class="pill pill-lab">Optimized</span>
+      </div>
+      <p class="panel-copy">
+        Candidates were scored on the training segment and promoted with holdout validation before entering the final leaderboard.
+      </p>
+
+      <div class="split-grid">
+        <article class="split-card">
+          <span>Train Bars</span>
+          <strong>{{ optimization.get('split', {}).get('train_bars')|pretty }}</strong>
+          <small>{{ optimization.get('split', {}).get('train_start', 'N/A') }} to {{ optimization.get('split', {}).get('train_end', 'N/A') }}</small>
+        </article>
+        <article class="split-card">
+          <span>Test Bars</span>
+          <strong>{{ optimization.get('split', {}).get('test_bars')|pretty }}</strong>
+          <small>{{ optimization.get('split', {}).get('test_start', 'N/A') }} to {{ optimization.get('split', {}).get('test_end', 'N/A') }}</small>
+        </article>
+        <article class="split-card">
+          <span>Families</span>
+          <strong>{{ optimization.get('summary', [])|length }}</strong>
+          <small>Promoted strategy families</small>
+        </article>
+        <article class="split-card">
+          <span>Candidates</span>
+          <strong>{{ optimization.get('candidates', [])|length }}</strong>
+          <small>Total evaluated parameter sets</small>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Family</th>
+              <th>Selected Params</th>
+              <th>Train Score</th>
+              <th>Test Score</th>
+              <th>Test Return %</th>
+              <th>Test Sharpe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in optimization.get('summary', []) %}
+            <tr>
+              <td>{{ row.get('family') }}</td>
+              <td>{{ row.get('selected_param_label') }}</td>
+              <td>{{ row.get('train_score')|pretty }}</td>
+              <td>{{ row.get('test_score')|pretty }}</td>
+              <td>{{ row.get('test_total_return_pct')|pretty }}</td>
+              <td>{{ row.get('test_sharpe_ratio')|pretty }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="candidate-grid">
+        {% for row in optimization.get('top_candidates', [])[:6] %}
+        <article class="candidate-card">
+          <span class="candidate-family">{{ row.get('family') }}</span>
+          <h3>{{ row.get('param_label') }}</h3>
+          <div class="candidate-metrics">
+            <div>
+              <span>Train Score</span>
+              <strong>{{ row.get('train_score')|pretty }}</strong>
+            </div>
+            <div>
+              <span>Sharpe</span>
+              <strong>{{ row.get('train_sharpe_ratio')|pretty }}</strong>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
 
     <section class="panel">
-      <div class="panel-head">
-        <h2>Leaderboard</h2>
+      <div class="section-header">
+        <div>
+          <p class="panel-kicker">Leaderboard</p>
+          <h2>Resilience ranking</h2>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -208,14 +488,20 @@
     </section>
 
     <section class="panel">
-      <div class="panel-head">
-        <h2>Visual Outputs</h2>
+      <div class="section-header">
+        <div>
+          <p class="panel-kicker">Artifact Gallery</p>
+          <h2>Visual outputs</h2>
+        </div>
       </div>
-      <div class="visual-grid">
+      <div class="visual-stage">
         {% for item in visuals %}
-        <article class="visual-card">
-          <div class="visual-top">
-            <h3>{{ item.label }}</h3>
+        <article class="visual-card {% if loop.first %}visual-card-featured{% endif %}">
+          <div class="visual-meta">
+            <div>
+              <span class="panel-kicker">PNG Artifact</span>
+              <h3>{{ item.label }}</h3>
+            </div>
             <a href="{{ url_for('artifacts', filename=item.filename) }}" target="_blank" rel="noreferrer">Open</a>
           </div>
           <img src="{{ url_for('artifacts', filename=item.filename) }}" alt="{{ item.label }}">
@@ -224,12 +510,15 @@
       </div>
     </section>
 
-    <section class="grid two-up">
+    <section class="utility-grid">
       <article class="panel">
-        <div class="panel-head">
-          <h2>Strategy Health</h2>
+        <div class="section-header">
+          <div>
+            <p class="panel-kicker">Execution Audit</p>
+            <h2>Strategy health</h2>
+          </div>
         </div>
-        <div class="table-wrap small">
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -254,13 +543,18 @@
       </article>
 
       <article class="panel">
-        <div class="panel-head">
-          <h2>Downloads</h2>
+        <div class="section-header">
+          <div>
+            <p class="panel-kicker">Exports</p>
+            <h2>Download shelf</h2>
+          </div>
         </div>
-        <div class="download-list">
+        <div class="download-grid">
           {% for item in downloads %}
-          <a href="{{ url_for('artifacts', filename=item.filename) }}" target="_blank" rel="noreferrer">
-            {{ item.label }}
+          <a class="download-card" href="{{ url_for('artifacts', filename=item.filename) }}" target="_blank" rel="noreferrer">
+            <span class="download-type">Artifact</span>
+            <strong>{{ item.label }}</strong>
+            <small>Open file</small>
           </a>
           {% endfor %}
         </div>

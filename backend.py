@@ -36,6 +36,8 @@ class PipelineConfig:
     sizing_method: str = "kelly_fractional"
     risk_free_rate: float = 0.065
     strict: bool = False
+    optimize: bool = False
+    train_ratio: float = 0.70
 
     def validate(self) -> "PipelineConfig":
         if self.data_source not in SUPPORTED_SOURCES:
@@ -56,6 +58,8 @@ class PipelineConfig:
             raise ValueError("A ticker symbol is required when source='yfinance'.")
         if pd.Timestamp(self.start) >= pd.Timestamp(self.end):
             raise ValueError("Start date must be earlier than end date.")
+        if not 0.5 <= self.train_ratio < 0.95:
+            raise ValueError("Train ratio must be between 0.50 and 0.95.")
 
         self.output_dir = Path(self.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)

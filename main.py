@@ -8,6 +8,7 @@ outputs performance report + trade log CSV + charts.
 
 import sys
 import warnings
+import json
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +25,8 @@ from strategies  import (
 from execution   import CostConfig, RiskConfig
 from analytics   import WalkForwardValidator, MonteCarloAnalysis
 from charts      import (
-    plot_dashboard, plot_monte_carlo, plot_walk_forward, plot_strategy_comparison
+    plot_dashboard, plot_monte_carlo, plot_walk_forward, plot_strategy_comparison,
+    plot_strategy_lab,
 )
 from reporting   import (
     RegimeLens, StrategyScorecard, build_regime_frame, export_research_report
@@ -33,6 +35,7 @@ from backend     import (
     PipelineConfig, build_runtime_cost_config, build_runtime_risk_config,
     evaluate_strategy, setup_run_logger, utc_now_iso, write_run_manifest
 )
+from optimizer   import run_strategy_lab
 
 
 # ─────────────────────────────────────────────
@@ -150,6 +153,12 @@ def _safe_filename(name: str) -> str:
     return (
         name.replace(" ", "_")
         .replace("/", "-")
+        .replace("[", "")
+        .replace("]", "")
+        .replace(",", "")
+        .replace("<", "lt")
+        .replace(">", "gt")
+        .replace(":", "-")
         .replace("(", "")
         .replace(")", "")
         .replace("+", "plus")
@@ -170,6 +179,8 @@ def run_pipeline(
     sizing_method: str = "kelly_fractional",
     risk_free_rate: float = RISK_FREE_RATE,
     strict: bool = False,
+    optimize: bool = False,
+    train_ratio: float = 0.70,
 ):
     config = PipelineConfig(
         data_source=data_source,
@@ -182,6 +193,8 @@ def run_pipeline(
         sizing_method=sizing_method,
         risk_free_rate=risk_free_rate,
         strict=strict,
+        optimize=optimize,
+        train_ratio=train_ratio,
     ).validate()
 
     runtime_cost_cfg = build_runtime_cost_config(COST_CFG)
@@ -196,20 +209,37 @@ def run_pipeline(
     failures = []
     all_results = []
     dataset_info = {}
+    strategy_lab_payload = None
+    strategy_lab_split = {}
     fatal_error = None
 
     logger.info(
-        "Pipeline started | run_id=%s source=%s symbol=%s output_dir=%s",
-        run_id, config.data_source, config.symbol, config.output_dir
+        "Pipeline started | run_id=%s source=%s symbol=%s output_dir=%s optimize=%s train_ratio=%.2f",
+        run_id, config.data_source, config.symbol, config.output_dir, config.optimize, config.train_ratio
     )
 
     try:
+        if config.optimize:
+            load_step = "[1/7]"
+            strategy_step = "[3/7]"
+            comparison_step = "[4/7]"
+            leaderboard_step = "[5/7]"
+            charts_step = "[6/7]"
+            export_step = "[7/7]"
+        else:
+            load_step = "[1/6]"
+            strategy_step = "[2/6]"
+            comparison_step = "[3/6]"
+            leaderboard_step = "[4/6]"
+            charts_step = "[5/6]"
+            export_step = "[6/6]"
+
         print("\n" + "═" * 60)
         print("  ALGORITHMIC BACKTESTING ENGINE")
         print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("═" * 60)
 
-        print(f"\n[1/6] Loading data (source={config.data_source}) ...")
+        print(f"\n{load_step} Loading data (source={config.data_source}) ...")
         df = _load_data(
             source=config.data_source,
             filepath=config.filepath,
@@ -228,6 +258,7 @@ def run_pipeline(
             "start": str(df.index[0].date()),
             "end": str(df.index[-1].date()),
             "selection_metric": "resilience_score",
+            "research_mode": "preset_suite",
         }
 
         benchmark = df["close"].copy()
@@ -242,8 +273,80 @@ def run_pipeline(
             verbose=False,
         )
 
-        print(f"\n[2/6] Running {len(STRATEGIES)} strategies with robustness checks ...")
-        for name, strategy in STRATEGIES.items():
+        strategies_to_run = [(name, strategy, None) for name, strategy in STRATEGIES.items()]
+
+        if config.optimize:
+            print(
+                f"\n[2/7] Running strategy lab "
+                f"(train={config.train_ratio:.0%}, test={1 - config.train_ratio:.0%}) ..."
+            )
+            lab = run_strategy_lab(
+                df,
+                base_cost_config=runtime_cost_cfg,
+                base_risk_config=runtime_risk_cfg,
+                risk_free_rate=config.risk_free_rate,
+                train_ratio=config.train_ratio,
+            )
+            strategy_lab_split = lab["split"]
+            dataset_info.update({
+                "selection_metric": "strategy_lab_train_score",
+                "research_mode": "train_test_optimization",
+                **strategy_lab_split,
+            })
+            lab_candidate_df = lab["candidate_df"].drop(columns=["params"], errors="ignore")
+            lab_summary_df = lab["summary_df"].drop(columns=["params"], errors="ignore")
+            top_candidates = []
+            if not lab_candidate_df.empty:
+                top_candidates = (
+                    lab_candidate_df[lab_candidate_df["status"] == "success"]
+                    .sort_values(["train_score", "train_sharpe_ratio"], ascending=[False, False])
+                    .head(8)
+                    .to_dict("records")
+                )
+            strategy_lab_payload = {
+                "enabled": True,
+                "split": strategy_lab_split,
+                "summary": lab["summary_records"],
+                "candidates": lab["candidate_records"],
+                "top_candidates": top_candidates,
+            }
+
+            lab_candidate_df.to_csv(config.output_dir / "strategy_lab_candidates.csv", index=False)
+            lab_summary_df.to_csv(config.output_dir / "strategy_lab_summary.csv", index=False)
+            (config.output_dir / "strategy_lab.json").write_text(
+                json.dumps(strategy_lab_payload, indent=2, default=str),
+                encoding="utf-8",
+            )
+            outputs_written.extend([
+                "strategy_lab_candidates.csv",
+                "strategy_lab_summary.csv",
+                "strategy_lab.json",
+            ])
+
+            if not lab_summary_df.empty:
+                plot_strategy_lab(
+                    lab_summary_df,
+                    savepath=str(config.output_dir / "strategy_lab.png"),
+                )
+                outputs_written.append("strategy_lab.png")
+
+            print(
+                f"      Evaluated {len(lab['candidate_records'])} candidates across "
+                f"{len(lab['selected_strategies'])} strategy families."
+            )
+            for selection in lab["summary_records"]:
+                print(
+                    f"      {selection['family']}: {selection['selected_param_label']} | "
+                    f"train {selection['train_score']:.2f} | test {selection.get('test_score', 0):.2f}"
+                )
+
+            strategies_to_run = [
+                (item["name"], item["strategy"], item)
+                for item in lab["selected_strategies"]
+            ]
+
+        print(f"\n{strategy_step} Running {len(strategies_to_run)} strategies with robustness checks ...")
+        for name, strategy, optimization_meta in strategies_to_run:
             print(f"\n  ▶ {name}")
             result_payload, audit = evaluate_strategy(
                 name=name,
@@ -277,16 +380,30 @@ def run_pipeline(
                 f"Regime: {result_payload['regime_analysis']['resilience_score']:.1f}%"
             )
             result_payload["backend_duration_seconds"] = audit.duration_seconds
+            if optimization_meta:
+                result_payload["optimization"] = {
+                    "family": optimization_meta["family"],
+                    "params": optimization_meta["params"],
+                    "param_label": optimization_meta["param_label"],
+                    "train_score": optimization_meta["train_score"],
+                    "test_score": optimization_meta["test_score"],
+                    "candidate_count": optimization_meta["candidate_count"],
+                    "test_status": optimization_meta["test_status"],
+                    "test_error_type": optimization_meta["test_error_type"],
+                    "test_error_message": optimization_meta["test_error_message"],
+                    "test_metrics": optimization_meta["test_metrics"],
+                    "split": strategy_lab_split,
+                }
             all_results.append(result_payload)
 
-        print("\n[3/6] Performance comparison:")
+        print(f"\n{comparison_step} Performance comparison:")
         _print_summary_table(all_results)
 
         if not all_results:
             raise RuntimeError("No strategies completed successfully.")
 
         scorecard = StrategyScorecard().build(all_results)
-        print("[4/6] Resilience leaderboard:")
+        print(f"{leaderboard_step} Resilience leaderboard:")
         _print_resilience_table(scorecard)
 
         best_name = scorecard.iloc[0]["strategy"]
@@ -294,7 +411,7 @@ def run_pipeline(
         best["resilience_score"] = float(scorecard.iloc[0]["resilience_score"])
         print(f"  ★ Best by resilience score: {best['name']} ({best['resilience_score']:.2f})")
 
-        print("\n[5/6] Generating charts ...")
+        print(f"\n{charts_step} Generating charts ...")
         plot_strategy_comparison(scorecard, savepath=str(config.output_dir / "strategy_comparison.png"))
         outputs_written.append("strategy_comparison.png")
         plot_dashboard(
@@ -327,7 +444,7 @@ def run_pipeline(
             )
             outputs_written.append("monte_carlo.png")
 
-        print("\n[6/6] Exporting results ...")
+        print(f"\n{export_step} Exporting results ...")
 
         for r in all_results:
             safe_name = _safe_filename(r["name"])
@@ -357,6 +474,13 @@ def run_pipeline(
                 "dominant_regime": r["regime_analysis"].get("dominant_regime", "N/A"),
                 "backend_duration_seconds": r.get("backend_duration_seconds", 0),
             })
+            if r.get("optimization"):
+                row.update({
+                    "strategy_family": r["optimization"].get("family"),
+                    "optimized_param_label": r["optimization"].get("param_label"),
+                    "strategy_lab_train_score": r["optimization"].get("train_score", 0),
+                    "strategy_lab_test_score": r["optimization"].get("test_score", 0),
+                })
             summary_rows.append(row)
         pd.DataFrame(summary_rows).to_csv(config.output_dir / "performance_summary.csv", index=False)
         outputs_written.append("performance_summary.csv")
@@ -381,6 +505,7 @@ def run_pipeline(
             ranking_df=scorecard,
             all_results=all_results,
             dataset_info=dataset_info,
+            optimization_report=strategy_lab_payload,
         )
         outputs_written.extend([Path(report_paths["markdown"]).name, Path(report_paths["json"]).name])
         print(f"  → {Path(report_paths['markdown']).name}")
@@ -436,6 +561,7 @@ def _print_final_report(
     walk_forward = best.get("walk_forward", {})
     regime = best.get("regime_analysis", {})
     monte_carlo = best.get("monte_carlo", {})
+    optimization = best.get("optimization", {})
 
     print("\n" + "═" * 60)
     print(f"  FINAL REPORT — {n}")
@@ -473,6 +599,12 @@ def _print_final_report(
     print(f"  WF Avg Sharpe:     {walk_forward.get('wf_avg_sharpe', 0):.3f}")
     print(f"  Regime Resilience: {regime.get('resilience_score', 0):.2f}%")
     print(f"  Dominant Regime:   {regime.get('dominant_regime', 'N/A')}")
+    if optimization:
+        print(f"\n  ── STRATEGY LAB ──")
+        print(f"  Family:            {optimization.get('family', 'N/A')}")
+        print(f"  Params:            {optimization.get('param_label', 'N/A')}")
+        print(f"  Train Score:       {optimization.get('train_score', 0):.2f}")
+        print(f"  Test Score:        {optimization.get('test_score', 0):.2f}")
     print(f"\n  ── BENCHMARK ──")
     print(f"  Alpha (ann.):      {s['alpha_pct']:+.2f}%")
     print(f"  Beta:              {s['beta']:.4f}")
@@ -521,6 +653,10 @@ if __name__ == "__main__":
                         choices=["kelly_fractional","fixed_pct","atr_based","equal"])
     parser.add_argument("--strict", action="store_true",
                         help="Abort the pipeline on the first strategy failure.")
+    parser.add_argument("--optimize", action="store_true",
+                        help="Run the strategy lab and promote tuned configurations.")
+    parser.add_argument("--train-ratio", default=0.70, type=float,
+                        help="Training split ratio used when --optimize is enabled.")
     args = parser.parse_args()
 
     run_pipeline(
@@ -533,4 +669,6 @@ if __name__ == "__main__":
         initial_capital=args.capital,
         sizing_method=args.sizing,
         strict=args.strict,
+        optimize=args.optimize,
+        train_ratio=args.train_ratio,
     )

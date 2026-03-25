@@ -1,6 +1,6 @@
 # Algorithmic Backtesting Engine
 
-This project is a backend-first quantitative research system with a minimal Flask frontend layered on top of it. It can run rule-based backtests on synthetic data, CSV files, or Yahoo Finance data, then generate reports, rankings, audit artifacts, and a small browser UI for viewing results or triggering new runs.
+This project is a backend-first quantitative research system with a minimal Flask frontend layered on top of it. It can run rule-based backtests on synthetic data, CSV files, or Yahoo Finance data, then generate reports, rankings, audit artifacts, and a browser UI for viewing results, triggering new runs, or launching a train/test strategy lab.
 
 ## What This Project Does
 
@@ -11,8 +11,9 @@ At a high level, the system:
 3. runs multiple trading strategies through a backtesting engine
 4. applies realistic cost and execution assumptions
 5. computes performance, drawdown, walk-forward, Monte Carlo, and regime-resilience analytics
-6. exports charts, CSV summaries, JSON and Markdown reports, and runtime audit files
-7. serves those outputs through a minimal Flask frontend
+6. optionally runs a strategy lab that tunes parameter grids on a training split and validates promoted configurations on a holdout set
+7. exports charts, CSV summaries, JSON and Markdown reports, and runtime audit files
+8. serves those outputs through a minimal Flask frontend
 
 The project is intentionally simple in deployment style:
 
@@ -31,12 +32,14 @@ The project is intentionally simple in deployment style:
   - brokerage and transaction costs
   - position sizing and risk constraints
 - Strategy comparison with a composite resilience score
+- Train/test strategy lab with parameter search and candidate promotion
 - Walk-forward validation
 - Monte Carlo bootstrap analysis
 - Market regime classification and resilience scoring
 - Run logging, strategy health auditing, and manifest output
 - Minimal frontend with:
   - one-click demo backtest
+  - one-click demo strategy lab
   - manual backtest form
   - live view of latest outputs
 
@@ -54,10 +57,11 @@ flowchart TD
     D --> G["Execution + Risk (execution.py)"]
     D --> H["Backtest Engine (engine.py)"]
     D --> I["Analytics (analytics.py)"]
-    D --> J["Reporting (reporting.py)"]
-    J --> K["Charts + Files (charts.py, output/)"]
+    D --> J["Strategy Lab (optimizer.py)"]
+    D --> K["Reporting (reporting.py)"]
+    K --> L["Charts + Files (charts.py, output/)"]
 
-    K --> L["Frontend Dashboard"]
+    L --> M["Frontend Dashboard"]
 ```
 
 ## Runtime Flow
@@ -67,16 +71,17 @@ The normal execution path looks like this:
 1. `main.py` receives CLI inputs such as source, symbol, capital, sizing method, and output directory.
 2. `backend.py` validates the run configuration and creates isolated runtime config objects.
 3. `data.py` loads and cleans OHLCV data.
-4. For each strategy:
+4. If strategy lab mode is enabled, `optimizer.py` evaluates parameter grids on the training split and promotes one configuration per strategy family using holdout performance.
+5. For each strategy:
    - `engine.py` simulates bar-by-bar trading
    - `execution.py` applies costs, slippage, and sizing rules
    - `analytics.py` computes performance metrics
    - `reporting.py` computes monthly consistency, walk-forward summaries, and regime-resilience details
    - `backend.py` records a strategy audit entry
-5. `charts.py` writes visual outputs.
-6. `reporting.py` exports JSON and Markdown reports.
-7. `backend.py` writes `pipeline.log`, `strategy_health.csv`, and `run_manifest.json`.
-8. `app.py` reads those outputs and renders the dashboard.
+6. `charts.py` writes visual outputs.
+7. `reporting.py` exports JSON and Markdown reports.
+8. `backend.py` writes `pipeline.log`, `strategy_health.csv`, and `run_manifest.json`.
+9. `app.py` reads those outputs and renders the dashboard.
 
 ## Repository Structure
 
@@ -86,6 +91,7 @@ The normal execution path looks like this:
 ├── backend.py             # Runtime orchestration, validation, logging, manifests
 ├── main.py                # Main pipeline entry point
 ├── data.py                # Data ingestion and OHLCV validation
+├── optimizer.py           # Train/test strategy lab and parameter search
 ├── strategies.py          # Strategy abstractions and signal generation
 ├── execution.py           # Slippage, cost model, position sizing
 ├── engine.py              # Backtesting engine and trade lifecycle
@@ -99,6 +105,7 @@ The normal execution path looks like this:
 ├── tests/
 │   ├── test_backend.py    # Backend runtime tests
 │   ├── test_frontend.py   # Frontend tests
+│   ├── test_optimizer.py  # Strategy lab tests
 │   └── test_smoke.py      # End-to-end smoke tests
 ├── requirements.txt
 └── output/                # Generated run artifacts
@@ -112,6 +119,7 @@ The normal execution path looks like this:
 
 - defines default strategy presets
 - loads data based on CLI options
+- optionally launches the strategy lab and promotes tuned configurations
 - invokes the runtime backend
 - triggers charts and report exports
 - prints the terminal summary report
@@ -182,6 +190,18 @@ Each strategy returns:
 - `exits`: boolean series
 
 The engine expects those signals to be aligned with the input index.
+
+### `optimizer.py`
+
+This module powers the strategy lab.
+
+Responsibilities:
+
+- split the dataset into train and test segments
+- evaluate candidate parameter grids for each strategy family
+- score candidates on the training split
+- promote one configuration per family
+- summarize holdout performance for the promoted candidates
 
 ### `execution.py`
 
@@ -264,6 +284,7 @@ It does not introduce a separate SPA or JavaScript build system. Instead, it:
 - serves static PNG/CSV/JSON/Markdown files
 - supports two run modes:
   - demo run
+  - demo strategy lab
   - manual backtest form
 
 This keeps the frontend small, maintainable, and easy to run locally.
@@ -295,8 +316,10 @@ This page includes:
 
 - run status card
 - `Run Demo Backtest` button
+- `Run Demo Strategy Lab` button
 - `Manual Backtest` form
 - summary cards for the best strategy
+- strategy-lab split and promotion tables when optimization mode is used
 - dataset and run-health panels
 - resilience leaderboard
 - visual output previews
@@ -327,6 +350,8 @@ The manual form accepts:
 - capital
 - sizing method
 - strict mode
+- strategy lab toggle
+- train ratio
 
 Behavior:
 
@@ -340,6 +365,10 @@ The pipeline writes to `output/` by default.
 
 Main artifacts:
 
+- `strategy_lab.png`
+- `strategy_lab.json`
+- `strategy_lab_summary.csv`
+- `strategy_lab_candidates.csv`
 - `dashboard.png`
 - `strategy_comparison.png`
 - `walk_forward.png`
@@ -412,6 +441,19 @@ python3 main.py --strict
 
 In strict mode, the pipeline stops on the first strategy failure. In normal mode, failed strategies are logged and the remaining strategies still run.
 
+### Strategy lab mode
+
+```bash
+python3 main.py --source synthetic --optimize --train-ratio 0.70
+```
+
+This mode:
+
+- tunes parameter grids on the training split
+- promotes one configuration per strategy family
+- exports holdout summaries and a dedicated strategy-lab chart
+- runs the promoted strategies through the full reporting stack
+
 ## Running The Frontend
 
 Start the Flask app:
@@ -457,6 +499,7 @@ The tests cover:
 - backend config validation
 - strategy failure isolation
 - engine smoke behavior
+- strategy-lab candidate selection
 - report generation behavior
 - frontend rendering
 - frontend run-form wiring
@@ -475,7 +518,7 @@ Or, if you prefer the browser:
 
 1. start `app.py`
 2. open the dashboard
-3. click `Run Demo Backtest` or submit the manual form
+3. click `Run Demo Backtest`, `Run Demo Strategy Lab`, or submit the manual form
 4. review the updated charts and downloads
 
 ## Extension Points
